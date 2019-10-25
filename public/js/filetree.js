@@ -98,7 +98,7 @@ function getChildJSON(d) {
     //console.log(chartConfig.data_url)
 
 	// load json data and trigger callback
-	d3.json(chartConfig.data_url, function (error, data) {
+	d3.json(chartConfig.data_url, function (data) {
 
 		// display error if data has error message
         if (data.error) {
@@ -186,7 +186,7 @@ function getJSON() {
 		var spinner = new Spinner(opts).spin(target);
         console.log(chartConfig.data_url)
 		// load json data from Elasticsearch
-		d3.json(chartConfig.data_url, function (error, data) {
+		d3.json(chartConfig.data_url, function (data) {
 
 			// display error if data has error message
 			if (data.error) {
