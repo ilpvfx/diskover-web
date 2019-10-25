@@ -26,7 +26,7 @@ if (empty($_REQUEST['id'])) {
         $file = $client->get([
             'id'    => $_REQUEST['id'],
             'index' => $_REQUEST['index'],
-            'type'  => $_REQUEST['doctype']
+            'type'  => '_all'
         ]);
         $fileid = $file['_id'];
         $filedoctype = $file['_type'];
