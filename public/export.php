@@ -175,7 +175,7 @@ header("Content-Transfer-Encoding: binary");
 // check if we are exporting file or directory
 if ($export_type == 'file') {
     if (count($results_source_file) > 0) {
-        if ($export == "json") {
+        if ((string)$export == "json") {
             echo json_encode($results_source_file);
         } elseif ($export == "csv") {
             echo array2csv($results_source_file);
