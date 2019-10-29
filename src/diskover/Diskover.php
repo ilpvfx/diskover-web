@@ -7,6 +7,7 @@ LICENSE for the full license text.
 
 session_start();
 use diskover\Constants;
+use Elasticsearch\Client;
 use Elasticsearch\ClientBuilder;
 
 error_reporting(E_ALL ^ E_NOTICE);
@@ -14,6 +15,143 @@ error_reporting(E_ALL ^ E_NOTICE);
 // diskover-web version
 $VERSION = '1.5.0.7';
 
+function console_log( $data ){
+  echo '<script>';
+  echo 'console.log('. json_encode( $data ) .')';
+  echo '</script>';
+}
+
+
+class _Client extends \Elasticsearch\Client {
+ /**
+     * $params['index']                    = (list) A comma-separated list of index names to search; use `_all` or empty string to perform the operation on all indices
+     *        ['type']                     = (list) A comma-separated list of document types to search; leave empty to perform the operation on all types
+     *        ['analyzer']                 = (string) The analyzer to use for the query string
+     *        ['analyze_wildcard']         = (boolean) Specify whether wildcard and prefix queries should be analyzed (default: false)
+     *        ['default_operator']         = (enum) The default operator for query string query (AND or OR)
+     *        ['df']                       = (string) The field to use as default where no field prefix is given in the query string
+     *        ['explain']                  = (boolean) Specify whether to return detailed information about score computation as part of a hit
+     *        ['fields']                   = (list) A comma-separated list of fields to return as part of a hit
+     *        ['from']                     = (number) Starting offset (default: 0)
+     *        ['ignore_indices']           = (enum) When performed on multiple indices, allows to ignore `missing` ones
+     *        ['indices_boost']            = (list) Comma-separated list of index boosts
+     *        ['lenient']                  = (boolean) Specify whether format-based query failures (such as providing text to a numeric field) should be ignored
+     *        ['lowercase_expanded_terms'] = (boolean) Specify whether query terms should be lowercased
+     *        ['preference']               = (string) Specify the node or shard the operation should be performed on (default: random)
+     *        ['q']                        = (string) Query in the Lucene query string syntax
+     *        ['query_cache']              = (boolean) Enable query cache for this request
+     *        ['request_cache']            = (boolean) Enable request cache for this request
+     *        ['routing']                  = (list) A comma-separated list of specific routing values
+     *        ['scroll']                   = (duration) Specify how long a consistent view of the index should be maintained for scrolled search
+     *        ['search_type']              = (enum) Search operation type
+     *        ['size']                     = (number) Number of hits to return (default: 10)
+     *        ['sort']                     = (list) A comma-separated list of <field>:<direction> pairs
+     *        ['source']                   = (string) The URL-encoded request definition using the Query DSL (instead of using request body)
+     *        ['_source']                  = (list) True or false to return the _source field or not, or a list of fields to return
+     *        ['_source_exclude']          = (list) A list of fields to exclude from the returned _source field
+     *        ['_source_include']          = (list) A list of fields to extract and return from the _source field
+     *        ['stats']                    = (list) Specific 'tag' of the request for logging and statistical purposes
+     *        ['suggest_field']            = (string) Specify which field to use for suggestions
+     *        ['suggest_mode']             = (enum) Specify suggest mode
+     *        ['suggest_size']             = (number) How many suggestions to return in response
+     *        ['suggest_text']             = (text) The source text for which the suggestions should be returned
+     *        ['timeout']                  = (time) Explicit operation timeout
+     *        ['terminate_after']          = (number) The maximum number of documents to collect for each shard, upon reaching which the query execution will terminate early.
+     *        ['version']                  = (boolean) Specify whether to return document version as part of a hit
+     *        ['body']                     = (array|string) The search definition using the Query DSL
+     *
+     * @param $params array Associative array of parameters
+     *
+     * @return array
+     */
+    public function search($params = array())
+    {
+        $index = $this->extractArgument($params, 'index');
+        $type = [];
+        $body = $this->extractArgument($params, 'body');
+        $body['query']['bool']['must'] = $this->extractArgument($body, 'query');
+
+        $types = explode(",", $this->extractArgument($params, 'type'));
+        $body['query']['bool']['filter']['terms']['type'] = $types;
+
+        /** @var callback $endpointBuilder */
+        $endpointBuilder = $this->endpoints;
+
+        /** @var \Elasticsearch\Endpoints\Search $endpoint */
+        $endpoint = $endpointBuilder('Search');
+        $endpoint->setIndex($index)
+                 ->setType($type)
+                 ->setBody($body);
+        $endpoint->setParams($params);
+
+        $result = $this->performRequest($endpoint);
+
+        $result['hits']['total'] = $result['hits']['total']['value'];
+
+        foreach($result['hits']['hits'] as $k => $v)
+        {
+            $result['hits']['hits'][$k]['_type'] = $v['_source']['type'];
+        }
+
+        //console_log($result);
+
+
+        return $result;
+    }
+
+    public function scroll($params = array())
+    {
+        $scrollID = $this->extractArgument($params, 'scroll_id');
+        $body = $this->extractArgument($params, 'body');
+        /**
+        * @var callable $endpointBuilder
+        */
+        $endpointBuilder = $this->endpoints;
+        /**
+        * @var \Elasticsearch\Endpoints\Scroll $endpoint
+        */
+        $endpoint = $endpointBuilder('Scroll');
+        $endpoint->setScrollId($scrollID)
+            ->setBody($body)
+            ->setParams($params);
+        $result =  $this->performRequest($endpoint);
+
+        foreach($result['hits']['hits'] as $k => $v)
+        {
+            $result['hits']['hits'][$k]['_type'] = $v['_source']['type'];
+        }
+
+        return $result;
+    }
+
+
+    /**
+     * @param $endpoint AbstractEndpoint
+     *
+     * @throws \Exception
+     * @return array
+     */
+    private function performRequest(\Elasticsearch\Endpoints\AbstractEndpoint $endpoint)
+    {
+        $promise =  $this->transport->performRequest(
+            $endpoint->getMethod(),
+            $endpoint->getURI(),
+            $endpoint->getParams(),
+            $endpoint->getBody(),
+            $endpoint->getOptions()
+        );
+
+        return $this->transport->resultOrFuture($promise, $endpoint->getOptions());
+    }
+
+}
+
+class _Builder extends \Elasticsearch\ClientBuilder {
+    protected function instantiate(\Elasticsearch\Transport $transport, callable $endpoint, array $registeredNamespaces): \Elasticsearch\Client
+    {
+        return new _Client($transport, $endpoint, $registeredNamespaces);
+    }
+}
 
 function connectES() {
     // Connect to Elasticsearch node
@@ -39,8 +177,7 @@ function connectES() {
             'user' => $esUser, 'pass' => $esPass ]
             ];
     }
-
-    $client = ClientBuilder::create()->setHosts($hosts)->build();
+    $client = _Builder::create()->setHosts($hosts)->build();
 
     $params = ['index' => $esIndex];
     $bool_index = $client->indices()->exists($params);
